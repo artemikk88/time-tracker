@@ -1,0 +1,47 @@
+// Эта схема используется ТОЛЬКО при сборке на Vercel (см. vercel.json → buildCommand).
+// Локально приложение и тесты работают на SQLite (prisma/schema.prisma) — модели
+// в обоих файлах должны совпадать.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Сотрудник. Профиль создаётся автоматически при первом входе из Telegram.
+model User {
+  id         String     @id @default(cuid())
+  telegramId String     @unique // Telegram user id (строкой, чтобы не упереться в 32 бита)
+  name       String
+  username   String?
+  position   String? // должность, заполняет сам сотрудник
+  rate       Float      @default(0.5) // ставка: 0.25 / 0.5 / 0.75 / 1.0 или своё значение
+  weeklyNorm Float? // недельная норма; null = ставка × 40 ч
+  isAdmin    Boolean    @default(false)
+  archived   Boolean    @default(false) // уволившиеся скрываются, данные сохраняются
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+  entries    DayEntry[]
+
+  @@index([archived])
+}
+
+// Отработанные часы за конкретный день. Недели считаются запросом по диапазону дат.
+model DayEntry {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date      String // YYYY-MM-DD (локальная дата сотрудника)
+  hours     Float // 0–12, шаг 0.5; для записей с диапазоном считается из него
+  startTime String? // "HH:MM" — начало работы; null у старых записей «просто часы»
+  endTime   String? // "HH:MM" — конец работы; при ночной смене конец на следующие сутки
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, date])
+  @@index([userId, date])
+  @@index([date])
+}
